@@ -63,3 +63,109 @@ plt.title("Forest Plot of Odds Ratios with 95% Confidence Intervals")
 # Show the plot
 plt.tight_layout()
 plt.show()
+
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Example dictionary of contingency tables for 4 types of complications
+contingency_dict = {
+    "Complication A": {
+        "Subgroup": ["Subgroup 1", "Subgroup 2", "Subgroup 3"],
+        "Complications": [30, 40, 20],
+        "Non-Complications": [70, 60, 80],
+    },
+    "Complication B": {
+        "Subgroup": ["Subgroup 1", "Subgroup 2", "Subgroup 3"],
+        "Complications": [25, 50, 15],
+        "Non-Complications": [75, 50, 85],
+    },
+    "Complication C": {
+        "Subgroup": ["Subgroup 1", "Subgroup 2", "Subgroup 3"],
+        "Complications": [20, 30, 10],
+        "Non-Complications": [80, 70, 90],
+    },
+    "Complication D": {
+        "Subgroup": ["Subgroup 1", "Subgroup 2", "Subgroup 3"],
+        "Complications": [35, 45, 25],
+        "Non-Complications": [65, 55, 75],
+    },
+}
+
+# Define colors for each complication type
+colors = ["blue", "green", "orange", "red"]
+
+# Set vertical offset for staggered lines
+vertical_offset = 0.2  # Adjust spacing between lines
+
+# Initialize plot
+plt.figure(figsize=(10, len(contingency_dict["Complication A"]["Subgroup"]) * 2))
+
+# Iterate over each complication type and calculate odds ratios + confidence intervals
+for idx, (complication_type, data) in enumerate(contingency_dict.items()):
+    df = pd.DataFrame(data)
+    
+    # Reference group (e.g., Subgroup 1 as baseline)
+    ref_complications = df.loc[0, "Complications"]
+    ref_non_complications = df.loc[0, "Non-Complications"]
+
+    # Calculate Odds and Odds Ratios
+    df["Odds"] = df["Complications"] / df["Non-Complications"]
+    ref_odds = ref_complications / ref_non_complications
+    df["Odds Ratio"] = df["Odds"] / ref_odds
+
+    # Standard Error (SE) for Log Odds Ratio
+    df["SE_log_OR"] = np.sqrt(1 / df["Complications"] + 1 / df["Non-Complications"] +
+                              1 / ref_complications + 1 / ref_non_complications)
+
+    # Confidence Intervals in log scale
+    z = 1.96  # For 95% CI
+    df["log_OR"] = np.log(df["Odds Ratio"])
+    df["Lower CI (log)"] = df["log_OR"] - z * df["SE_log_OR"]
+    df["Upper CI (log)"] = df["log_OR"] + z * df["SE_log_OR"]
+
+    # Exponentiate to get CIs in the original OR scale
+    df["Lower CI"] = np.exp(df["Lower CI (log)"])
+    df["Upper CI"] = np.exp(df["Upper CI (log)"])
+
+    # Plot for each subgroup with vertical offsets
+    subgroups = df["Subgroup"]
+    odds_ratios = df["Odds Ratio"]
+    lower_ci = df["Lower CI"]
+    upper_ci = df["Upper CI"]
+
+    # Adjust y-positions to stagger lines
+    y_positions = np.arange(len(subgroups)) + idx * vertical_offset
+
+    plt.errorbar(
+        odds_ratios,
+        y_positions,
+        xerr=[odds_ratios - lower_ci, upper_ci - odds_ratios],
+        fmt='o',
+        capsize=5,
+        label=complication_type,
+        color=colors[idx % len(colors)]  # Cycle through colors
+    )
+
+# Add a vertical line at OR = 1 (no effect)
+plt.axvline(x=1, color='gray', linestyle='--', label="No Effect (OR=1)")
+
+# Label axes and add a title
+plt.xlabel("Odds Ratio")
+plt.ylabel("Subgroups")
+plt.title("Forest Plot of Odds Ratios for Different Complications")
+
+# Set custom y-ticks to align subgroups and add offset lines
+y_ticks = np.arange(len(subgroups))  # Base positions
+y_labels = [f"{subgroup}" for subgroup in subgroups]
+plt.yticks(y_ticks, y_labels)
+
+# Add legend
+plt.legend(title="Complication Type", loc="upper left", bbox_to_anchor=(1.05, 1))
+
+# Show the plot
+plt.tight_layout()
+plt.show()
+
