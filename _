@@ -1,0 +1,65 @@
+import numpy as np
+import pandas as pd
+
+# Example data: counts of complications and non-complications
+data = {
+    "Subgroup": ["Subgroup 1", "Subgroup 2", "Subgroup 3"],
+    "Complications": [30, 40, 20],
+    "Non-Complications": [70, 60, 80],
+}
+
+# Convert to DataFrame
+df = pd.DataFrame(data)
+
+# Reference group (e.g., Subgroup 1 as baseline)
+ref_complications = df.loc[0, "Complications"]
+ref_non_complications = df.loc[0, "Non-Complications"]
+
+# Calculate Odds and Odds Ratio
+df["Odds"] = df["Complications"] / df["Non-Complications"]
+ref_odds = ref_complications / ref_non_complications
+df["Odds Ratio"] = df["Odds"] / ref_odds
+
+# Standard Error (SE) for Log Odds Ratio
+df["SE_log_OR"] = np.sqrt(1 / df["Complications"] + 1 / df["Non-Complications"] +
+                          1 / ref_complications + 1 / ref_non_complications)
+
+# Confidence Intervals in log scale
+z = 1.96  # For 95% CI
+df["log_OR"] = np.log(df["Odds Ratio"])
+df["Lower CI (log)"] = df["log_OR"] - z * df["SE_log_OR"]
+df["Upper CI (log)"] = df["log_OR"] + z * df["SE_log_OR"]
+
+# Exponentiate to get CIs in original OR scale
+df["Lower CI"] = np.exp(df["Lower CI (log)"])
+df["Upper CI"] = np.exp(df["Upper CI (log)"])
+import matplotlib.pyplot as plt
+
+# Extract relevant columns from the DataFrame
+subgroups = df["Subgroup"]
+odds_ratios = df["Odds Ratio"]
+lower_ci = df["Lower CI"]
+upper_ci = df["Upper CI"]
+
+# Create the forest plot
+plt.figure(figsize=(8, len(subgroups) * 0.6))  # Adjust height for the number of subgroups
+plt.errorbar(
+    odds_ratios,                # x-coordinates (odds ratios)
+    subgroups,                  # y-coordinates (subgroups)
+    xerr=[odds_ratios - lower_ci, upper_ci - odds_ratios],  # Confidence interval widths
+    fmt='o',                    # Points style
+    capsize=5,                  # Size of error bar caps
+    color='blue',               # Color of points and error bars
+)
+
+# Add a vertical line at OR = 1 (no effect)
+plt.axvline(x=1, color='gray', linestyle='--', label="No Effect (OR=1)")
+
+# Label axes and add a title
+plt.xlabel("Odds Ratio")
+plt.ylabel("Subgroups")
+plt.title("Forest Plot of Odds Ratios with 95% Confidence Intervals")
+
+# Show the plot
+plt.tight_layout()
+plt.show()
