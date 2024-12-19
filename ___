@@ -1,0 +1,146 @@
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
+
+# Example data
+baseline_clusters = ["Cluster1", "Cluster2", "Cluster3"]
+baseline_counts = [263, 827, 183]
+
+followup_clusters = ["Cluster1", "Cluster2", "Cluster3"]
+followup_counts = [255, 811, 207]
+
+transitions = np.array([
+    [144, 115,   4],
+    [105, 627,  95],
+    [  6,  69, 108]
+])
+
+assert sum(baseline_counts) == sum(followup_counts) == transitions.sum(), "Totals must match."
+
+gap = 20
+
+def spaced_positions(counts, gap):
+    pos = [0]
+    for c in counts:
+        pos.append(pos[-1] + c + gap)
+    pos[-1] -= gap
+    return np.array(pos)
+
+baseline_pos = spaced_positions(baseline_counts, gap)
+followup_pos = spaced_positions(followup_counts, gap)
+
+fig, ax = plt.subplots(figsize=(10,6))
+plt.rcParams['font.family'] = 'Arial'
+plt.rcParams['font.size'] = 12
+ax.set_title("Patients' Transition Across Clusters Over Time", fontsize=16, fontweight='bold')
+
+left_x = 0.1
+right_x = 0.9
+
+followup_used = np.zeros(len(followup_counts))
+
+def cubic_bezier(p0, p1, p2, p3, t):
+    """Evaluate a cubic Bezier at parameter t (0 to 1). p0..p3 are (x,y) tuples."""
+    mt = 1 - t
+    x = (mt**3)*p0[0] + 3*(mt**2)*t*p1[0] + 3*mt*(t**2)*p2[0] + (t**3)*p3[0]
+    y = (mt**3)*p0[1] + 3*(mt**2)*t*p1[1] + 3*mt*(t**2)*p2[1] + (t**3)*p3[1]
+    return x, y
+
+for i, b_count in enumerate(baseline_counts):
+    y0_current = baseline_pos[i]
+    for j, f_count in enumerate(followup_counts):
+        flow = transitions[i, j]
+        if flow == 0:
+            continue
+
+        y0_lower = y0_current
+        y0_upper = y0_current + flow
+        y0_current += flow
+
+        y1_lower = followup_pos[j] + followup_used[j]
+        y1_upper = y1_lower + flow
+        followup_used[j] += flow
+
+        # Define control points for bottom edge (left to right)
+        # Bottom edge goes from left_x,y0_lower to right_x,y1_lower
+        # with control points pulling it towards the middle vertically
+        mid_x = (left_x + right_x) / 2
+        bottom_p0 = (left_x, y0_lower)
+        bottom_p1 = (mid_x, y0_lower)
+        bottom_p2 = (mid_x, y1_lower)
+        bottom_p3 = (right_x, y1_lower)
+
+        # Define control points for top edge (left to right)
+        # Top edge goes from left_x,y0_upper to right_x,y1_upper
+        # Reverse the logic of the top curve from the path to left-to-right
+        top_p0 = (left_x, y0_upper)
+        top_p1 = (mid_x, y0_upper)
+        top_p2 = (mid_x, y1_upper)
+        top_p3 = (right_x, y1_upper)
+
+        # Create the path for the patch (still needed for drawing)
+        vertices = [
+            (left_x, y0_lower),
+            (mid_x, y0_lower),
+            (mid_x, y1_lower),
+            (right_x, y1_lower),
+            (right_x, y1_upper),
+            (mid_x, y1_upper),
+            (mid_x, y0_upper),
+            (left_x, y0_upper),
+            (left_x, y0_lower)
+        ]
+
+        codes = [
+            Path.MOVETO,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.LINETO,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.CLOSEPOLY
+        ]
+
+        path = Path(vertices, codes)
+        color = f"C{i}"
+        patch = PathPatch(path, facecolor=color, alpha=0.8, edgecolor='none')
+        ax.add_patch(patch)
+
+        # Evaluate at a small t (e.g., t=0.15) to place text closer to the left side
+        t = 0.05
+        # Get positions on top and bottom curves at t
+        bx_bottom = cubic_bezier(bottom_p0, bottom_p1, bottom_p2, bottom_p3, t)
+        bx_top = cubic_bezier(top_p0, top_p1, top_p2, top_p3, t)
+        
+        # x should be the same (close to left side) but we can trust bottom and top to match in x
+        x_text = bx_bottom[0]  # or bx_top[0], they should be similar
+        y_text = (bx_bottom[1] + bx_top[1]) / 2
+
+        fraction = flow / baseline_counts[i]
+        percentage = f"{fraction*100:.1f}%"
+
+        ax.text(x_text, y_text, percentage, ha='center', va='center', fontsize=10, color='black', fontweight='bold',
+                bbox=dict(facecolor='white', alpha=0.1, edgecolor='none'))
+
+# Add labels for baseline clusters
+for i, name in enumerate(baseline_clusters):
+    mid_y = (baseline_pos[i] + baseline_pos[i+1]) / 2
+    ax.text(left_x - 0.05, mid_y, f"{name}\nn = {baseline_counts[i]}",
+            ha='right', va='center', fontsize=12, fontweight='bold')
+
+# Add labels for follow-up clusters
+for j, name in enumerate(followup_clusters):
+    mid_y = (followup_pos[j] + followup_pos[j+1]) / 2
+    ax.text(right_x + 0.05, mid_y, f"{name}\nn = {followup_counts[j]}",
+            ha='left', va='center', fontsize=12, fontweight='bold')
+
+total_height = max(baseline_pos[-1], followup_pos[-1])
+ax.set_xlim(0, 1)
+ax.set_ylim(0, total_height)
+ax.axis('off')
+
+plt.tight_layout()
+plt.show()
