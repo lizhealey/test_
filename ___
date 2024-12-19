@@ -144,3 +144,28 @@ ax.axis('off')
 
 plt.tight_layout()
 plt.show()
+
+import pandas as pd
+
+# Example: df_1 and df_2 each have columns: 'id' (unique person ID) and 'label' (cluster label)
+# df_1: baseline data
+# df_2: follow-up data
+
+# Step 1: Identify individuals present in both dataframes
+common_ids = set(df_1['id']).intersection(set(df_2['id']))
+
+# Step 2: Subset df_1 and df_2 to include only these common individuals
+df_1_common = df_1[df_1['id'].isin(common_ids)].copy()
+df_2_common = df_2[df_2['id'].isin(common_ids)].copy()
+
+# Step 3: Merge the two datasets on 'id' to align their cluster labels
+df_merged = pd.merge(df_1_common[['id', 'label']], 
+                     df_2_common[['id', 'label']], 
+                     on='id', 
+                     suffixes=('_baseline', '_followup'))
+
+# Step 4: Create the transition matrix using crosstab.
+transition_matrix = pd.crosstab(df_merged['label_baseline'], df_merged['label_followup'])
+
+print(transition_matrix)
+
