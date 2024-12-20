@@ -169,3 +169,156 @@ transition_matrix = pd.crosstab(df_merged['label_baseline'], df_merged['label_fo
 
 print(transition_matrix)
 
+
+
+
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
+
+# Example data with different number of baseline and follow-up groups
+baseline_clusters = ["Baseline A", "Baseline B"]
+baseline_counts = [300, 500]
+
+followup_clusters = ["Followup 1", "Followup 2", "Followup 3"]
+followup_counts = [200, 400, 200]
+
+# Transition matrix: shape must match (#baseline_clusters, #followup_clusters)
+# For example, from:
+# Baseline A -> Followup 1: 150, Followup 2: 100, Followup 3: 50
+# Baseline B -> Followup 1: 50,  Followup 2: 300, Followup 3: 150
+transitions = np.array([
+    [150, 100, 50],
+    [ 50, 300, 150]
+])
+
+# Check totals
+assert sum(baseline_counts) == sum(followup_counts) == transitions.sum(), "Totals must match."
+
+gap = 20
+
+def spaced_positions(counts, gap):
+    pos = [0]
+    for c in counts:
+        pos.append(pos[-1] + c + gap)
+    pos[-1] -= gap
+    return np.array(pos)
+
+baseline_pos = spaced_positions(baseline_counts, gap)
+followup_pos = spaced_positions(followup_counts, gap)
+
+fig, ax = plt.subplots(figsize=(10,6))
+plt.rcParams['font.family'] = 'Arial'
+plt.rcParams['font.size'] = 12
+ax.set_title("Patients' Transition Across Clusters Over Time", fontsize=16, fontweight='bold')
+
+left_x = 0.1
+right_x = 0.9
+
+followup_used = np.zeros(len(followup_counts))
+
+def cubic_bezier(p0, p1, p2, p3, t):
+    """Evaluate a cubic Bezier at parameter t (0 to 1). p0..p3 are (x,y) tuples."""
+    mt = 1 - t
+    x = (mt**3)*p0[0] + 3*(mt**2)*t*p1[0] + 3*mt*(t**2)*p2[0] + (t**3)*p3[0]
+    y = (mt**3)*p0[1] + 3*(mt**2)*t*p1[1] + 3*mt*(t**2)*p2[1] + (t**3)*p3[1]
+    return x, y
+
+for i, b_count in enumerate(baseline_counts):
+    y0_current = baseline_pos[i]
+    for j, f_count in enumerate(followup_counts):
+        flow = transitions[i, j]
+        if flow == 0:
+            continue
+
+        # Vertical positions on left
+        y0_lower = y0_current
+        y0_upper = y0_current + flow
+        y0_current += flow
+
+        # Vertical positions on right
+        y1_lower = followup_pos[j] + followup_used[j]
+        y1_upper = y1_lower + flow
+        followup_used[j] += flow
+
+        # Define control points for bottom edge
+        mid_x = (left_x + right_x) / 2
+        bottom_p0 = (left_x, y0_lower)
+        bottom_p1 = (mid_x, y0_lower)
+        bottom_p2 = (mid_x, y1_lower)
+        bottom_p3 = (right_x, y1_lower)
+
+        # Define control points for top edge
+        top_p0 = (left_x, y0_upper)
+        top_p1 = (mid_x, y0_upper)
+        top_p2 = (mid_x, y1_upper)
+        top_p3 = (right_x, y1_upper)
+
+        # Create the path for the patch
+        vertices = [
+            (left_x, y0_lower),
+            (mid_x, y0_lower),
+            (mid_x, y1_lower),
+            (right_x, y1_lower),
+            (right_x, y1_upper),
+            (mid_x, y1_upper),
+            (mid_x, y0_upper),
+            (left_x, y0_upper),
+            (left_x, y0_lower)
+        ]
+
+        codes = [
+            Path.MOVETO,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.LINETO,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.CURVE4,
+            Path.CLOSEPOLY
+        ]
+
+        path = Path(vertices, codes)
+        color = f"C{i}"
+        patch = PathPatch(path, facecolor=color, alpha=0.8, edgecolor='none')
+        ax.add_patch(patch)
+
+        # Evaluate at a small t (e.g. t=0.15) to place text inside the ribbon near the left
+        t = 0.15
+        bx_bottom = cubic_bezier(bottom_p0, bottom_p1, bottom_p2, bottom_p3, t)
+        bx_top = cubic_bezier(top_p0, top_p1, top_p2, top_p3, t)
+
+        x_text = bx_bottom[0]
+        y_text = (bx_bottom[1] + bx_top[1]) / 2
+
+        fraction = flow / baseline_counts[i]
+        percentage = f"{fraction*100:.1f}%"
+
+        ax.text(x_text, y_text, percentage, ha='center', va='center', fontsize=10, color='black', fontweight='bold',
+                bbox=dict(facecolor='white', alpha=0.6, edgecolor='none'))
+
+# Add labels for baseline clusters
+for i, name in enumerate(baseline_clusters):
+    mid_y = (baseline_pos[i] + baseline_pos[i+1]) / 2
+    ax.text(left_x - 0.05, mid_y, f"{name}\nn = {baseline_counts[i]}",
+            ha='right', va='center', fontsize=12, fontweight='bold')
+
+# Add labels for follow-up clusters
+for j, name in enumerate(followup_clusters):
+    mid_y = (followup_pos[j] + followup_pos[j+1]) / 2
+    ax.text(right_x + 0.05, mid_y, f"{name}\nn = {followup_counts[j]}",
+            ha='left', va='center', fontsize=12, fontweight='bold')
+
+total_height = max(baseline_pos[-1], followup_pos[-1])
+ax.set_xlim(0, 1)
+ax.set_ylim(0, total_height)
+ax.axis('off')
+
+plt.tight_layout()
+plt.show()
+
+
